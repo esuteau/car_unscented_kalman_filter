@@ -70,6 +70,9 @@ UKF::UKF() {
   // Initialize Sigma Point Matrix
   Xsig_pred_ = MatrixXd(n_aug_, 2 * n_aug_ + 1);
 
+  // Initialize Weights
+  weights_ = VectorXd(2 * n_aug_ + 1);
+
 }
 
 UKF::~UKF() {}
@@ -115,11 +118,8 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
           0, 0, 1000, 0,
           0, 0, 0, 1000;
 
-      // Initialize Sigma points matrix
-      Xsig_pred_ << 1, 0, 1, 0,
-          0, 1, 0, 1,
-          0, 0, 1, 0,
-          0, 0, 0, 1;
+      // Initialize Weights
+      weights_.fill(0.0);
 
       // Initialize Timestamp
       time_us_ = meas_package.timestamp_;
@@ -213,6 +213,36 @@ void UKF::Prediction(double delta_t) {
     Xsig_pred_(3,i) = yaw_p;
     Xsig_pred_(4,i) = yawd_p;
   }
+
+  // Calculate Weights
+  double weight_0 = lambda_ / (lambda_ + n_aug_);
+  weights_(0) = weight_0;
+  for (int i=1; i < nb_sigma_points; i++) {
+    double weight = 0.5 / (n_aug_ + lambda_);
+    weights_(i) = weight;
+  }
+ 
+  // Calculate Predicted State Mean
+  x_.fill(0.0);
+  for (int i = 0; i < nb_sigma_points; i++) {
+    x_ = x_ + weights_(i) * Xsig_pred_.col(i);
+  }
+
+  // Calculate Predicted State Covariance Matrix
+  P_.fill(0.0);
+  for (int i = 0; i < nb_sigma_points; i++) {
+  
+    // State difference
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+
+    // Angle normalization (between -Pi and +Pi)
+    while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
+    while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
+  
+    // Update Covariance Matrix
+    P_ = P_ + weights_(i) * x_diff * x_diff.transpose() ;
+  }
+
 
 }
 
