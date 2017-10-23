@@ -67,6 +67,18 @@ public:
   ///* Sigma point spreading parameter
   double lambda_;
 
+  ///* Number of Sigma Points
+  unsigned int nb_sigma_points_;
+
+  ///* Debug Flag
+  bool debug_print_;
+
+  ///* Radar NIS
+  double NIS_radar_;
+    
+  ///* Laser NIS
+  double NIS_laser_;
+
 
   /**
    * Constructor

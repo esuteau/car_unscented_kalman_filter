@@ -49,6 +49,8 @@ int main()
     vector<VectorXd> estimations;
     vector<VectorXd> ground_truth;
 
+    cout << "x RMSE, y RMSE, vx RMSE, vy RMSE, NIS, Sensor" << endl;
+
     h.onMessage([&ukf, &tools, &estimations, &ground_truth](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
         // "42" at the start of the message means there's a websocket message event.
         // The 4 signifies a websocket message
@@ -65,7 +67,6 @@ int main()
                 if (event == "telemetry")
                 {
                     // j[1] is the data JSON object
-
                     string sensor_measurement = j[1]["sensor_measurement"];
 
                     MeasurementPackage meas_package;
@@ -131,6 +132,7 @@ int main()
                     double yaw = ukf.x_(3);
                     double v1 = cos(yaw) * v;
                     double v2 = sin(yaw) * v;
+                    double NIS_res = meas_package.sensor_type_ == MeasurementPackage::RADAR ? ukf.NIS_radar_ : ukf.NIS_laser_;
 
                     estimate(0) = p_x;
                     estimate(1) = p_y;
@@ -139,9 +141,18 @@ int main()
 
                     estimations.push_back(estimate);
 
+                    // Debug
+                    //cout << "Estimate: " << estimate << endl;
+                    //cout << "Ground Truth: " << gt_values << endl;
+
                     // Calculate the Accuracy of the Prediction
                     VectorXd RMSE = tools.CalculateRMSE(estimations, ground_truth);
-                    cout << "RMSE        (px, py, vx, vy): " << RMSE(0) << ", " << RMSE(1) << ", " << RMSE(2) << ", " << RMSE(3) << endl;
+                    cout << RMSE(0) << ", ";
+                    cout << RMSE(1) << ", ";
+                    cout << RMSE(2) << ", ";
+                    cout << RMSE(3) << ", ";
+                    cout << NIS_res << ",";
+                    cout << meas_package.sensor_type_ << endl;
 
                     // Create a JSON strcuture to store the results
                     json msgJson;
