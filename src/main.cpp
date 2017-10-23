@@ -36,6 +36,14 @@ int main()
     // Create a Kalman Filter instance
     UKF ukf;
 
+    // You can turn on/off LIDAR or RADAR processing here.
+    ukf.use_laser_ = true;
+    ukf.use_radar_ = true;
+    if (!ukf.use_laser_ && !ukf.use_radar_){
+        cout << "Cannot have both LIDAR and RADAR processing disabled." << endl;
+        return -1;
+    }
+
     // used to compute the RMSE later
     Tools tools;
     vector<VectorXd> estimations;
