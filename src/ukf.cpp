@@ -51,6 +51,25 @@ UKF::UKF() {
 
   Hint: one or more values initialized above might be wildly off...
   */
+
+  // Start in uninitialized state.
+  is_initialized_ = false;
+
+  // Initialize time stamp to 0
+  time_us_ = 0;
+
+  // Set state dimension
+  n_x_ = 5;
+  
+  // Set augmented dimension
+  n_aug_ = 7;
+
+  // Define spreading parameter
+  lambda_ = 3 - n_aug_;
+
+  // Initialize Sigma Point Matrix
+  Xsig_pred_ = MatrixXd(n_aug_, 2 * n_aug_ + 1);
+
 }
 
 UKF::~UKF() {}
@@ -66,6 +85,49 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   Complete this function! Make sure you switch between lidar and radar
   measurements.
   */
+
+  // Initialization
+  if (!is_initialized_)
+  {
+      // first measurement
+      cout << "EKF: " << endl;
+      x_ = VectorXd(5);
+      x_ << 0, 0, 0, 0, 0;
+
+      if (meas_package.sensor_type_ == MeasurementPackage::RADAR)
+      {
+          // Convert radar from polar to cartesian coordinates and initialize state.
+          float rho = meas_package.raw_measurements_[0];
+          float phi = meas_package.raw_measurements_[1];
+          float px = rho * cos(-phi);
+          float py = rho * sin(-phi);
+          x_ << px, py, 0, 0;
+      }
+      else if (meas_package.sensor_type_ == MeasurementPackage::LASER)
+      {
+          // Initialize state.
+          x_ << meas_package.raw_measurements_[0], meas_package.raw_measurements_[1], 0, 0, 0;
+      }
+
+      // Initialize State covariance matrix P
+      P_ << 1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1000, 0,
+          0, 0, 0, 1000;
+
+      // Initialize Sigma points matrix
+      Xsig_pred_ << 1, 0, 1, 0,
+          0, 1, 0, 1,
+          0, 0, 1, 0,
+          0, 0, 0, 1;
+
+      // Initialize Timestamp
+      time_us_ = meas_package.timestamp_;
+
+      // done initializing, no need to predict or update
+      is_initialized_ = true;
+      return;
+  }
 }
 
 /**
@@ -80,6 +142,78 @@ void UKF::Prediction(double delta_t) {
   Complete this function! Estimate the object's location. Modify the state
   vector, x_. Predict sigma points, the state, and the state covariance matrix.
   */
+
+  // Augmented mean vector
+  VectorXd x_aug = VectorXd(n_aug_);
+  x_aug.head(5) = x_;
+  x_aug(5) = 0;
+  x_aug(6) = 0;
+
+  // Augmented state covariance
+  MatrixXd P_aug = MatrixXd(n_aug_, n_aug_);
+  P_aug.fill(0.0);
+  P_aug.topLeftCorner(5,5) = P_;
+  P_aug(5,5) = std_a_ * std_a_;
+  P_aug(6,6) = std_yawdd_ * std_yawdd_;
+
+  // Square root matrix
+  MatrixXd L = P_aug.llt().matrixL();
+
+  // Sigma point matrix
+  unsigned int nb_sigma_points = 2 * n_aug_ + 1;
+  MatrixXd Xsig_aug = MatrixXd(n_aug_, nb_sigma_points);
+  Xsig_aug.col(0)  = x_aug;
+  for (int i = 0; i < n_aug_; i++)
+  {
+    Xsig_aug.col(i + 1)           = x_aug + sqrt(lambda_ + n_aug_) * L.col(i);
+    Xsig_aug.col(i + 1 + n_aug_)  = x_aug - sqrt(lambda_ + n_aug_) * L.col(i);
+  }
+
+  // Predict sigma points
+  for (int i = 0; i < nb_sigma_points; i++)
+  {
+    // Extract values for better readability
+    double p_x      = Xsig_aug(0,i);
+    double p_y      = Xsig_aug(1,i);
+    double v        = Xsig_aug(2,i);
+    double yaw      = Xsig_aug(3,i);
+    double yawd     = Xsig_aug(4,i);
+    double nu_a     = Xsig_aug(5,i);
+    double nu_yawdd = Xsig_aug(6,i);
+
+    // Predicted state values
+    double px_p, py_p;
+
+    // Avoid division by zero
+    if (fabs(yawd) > 0.001) {
+        px_p = p_x + v/yawd * ( sin (yaw + yawd * delta_t) - sin(yaw));
+        py_p = p_y + v/yawd * ( cos(yaw) - cos(yaw + yawd * delta_t) );
+    }
+    else {
+        px_p = p_x + v*delta_t*cos(yaw);
+        py_p = p_y + v*delta_t*sin(yaw);
+    }
+
+    double v_p = v;
+    double yaw_p = yaw + yawd * delta_t;
+    double yawd_p = yawd;
+
+    // Add noise
+    px_p = px_p + 0.5 * nu_a * delta_t * delta_t * cos(yaw);
+    py_p = py_p + 0.5 * nu_a * delta_t * delta_t * sin(yaw);
+    v_p = v_p + nu_a * delta_t;
+
+    yaw_p = yaw_p + 0.5 * nu_yawdd * delta_t * delta_t;
+    yawd_p = yawd_p + nu_yawdd*delta_t;
+
+    // Write predicted sigma point into right column
+    Xsig_pred_(0,i) = px_p;
+    Xsig_pred_(1,i) = py_p;
+    Xsig_pred_(2,i) = v_p;
+    Xsig_pred_(3,i) = yaw_p;
+    Xsig_pred_(4,i) = yawd_p;
+  }
+
 }
 
 /**
